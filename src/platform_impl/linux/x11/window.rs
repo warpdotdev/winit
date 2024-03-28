@@ -33,8 +33,8 @@ use crate::{
         PlatformSpecificWindowBuilderAttributes, VideoMode as PlatformVideoMode,
     },
     window::{
-        CursorGrabMode, CursorIcon, ImePurpose, ResizeDirection, Theme, UserAttentionType,
-        WindowAttributes, WindowButtons, WindowLevel,
+        ActivationToken, CursorGrabMode, CursorIcon, ImePurpose, ResizeDirection, Theme,
+        UserAttentionType, WindowAttributes, WindowButtons, WindowLevel,
     },
 };
 
@@ -1818,6 +1818,12 @@ impl UnownedWindow {
                 );
             }
         }
+    }
+
+    pub fn activate(&self, token: ActivationToken) {
+        let _ = self
+            .xconn
+            .remove_activation_token(self.xwindow, &token._token);
     }
 
     #[inline]

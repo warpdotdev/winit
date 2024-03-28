@@ -23,8 +23,8 @@ use crate::platform_impl::{
     PlatformSpecificWindowBuilderAttributes as PlatformAttributes,
 };
 use crate::window::{
-    CursorGrabMode, CursorIcon, ImePurpose, ResizeDirection, Theme, UserAttentionType,
-    WindowAttributes, WindowButtons, WindowLevel,
+    ActivationToken, CursorGrabMode, CursorIcon, ImePurpose, ResizeDirection, Theme,
+    UserAttentionType, WindowAttributes, WindowButtons, WindowLevel,
 };
 
 use super::event_loop::sink::EventSink;
@@ -633,6 +633,12 @@ impl Window {
 
     #[inline]
     pub fn focus_window(&self) {}
+
+    pub fn activate(&self, token: ActivationToken) {
+        if let Some(xdg_activation) = &self.xdg_activation {
+            xdg_activation.activate(token._token, self.surface());
+        }
+    }
 
     #[inline]
     pub fn surface(&self) -> &WlSurface {
