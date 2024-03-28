@@ -1254,6 +1254,10 @@ impl Window {
         self.window.maybe_queue_on_main(|w| w.focus_window())
     }
 
+    pub fn activate(&self, token: ActivationToken) {
+        self.window.maybe_queue_on_main(|w| w.activate(token))
+    }
+
     /// Gets whether the window has keyboard focus.
     ///
     /// This queries the same state information as [`WindowEvent::Focused`].
