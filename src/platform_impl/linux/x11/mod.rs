@@ -17,7 +17,7 @@ use calloop::generic::Generic;
 use calloop::ping::Ping;
 use calloop::{EventLoop as Loop, Readiness};
 use libc::{setlocale, LC_CTYPE};
-use tracing::warn;
+use tracing::{error, warn};
 
 use x11rb::connection::RequestConnection;
 use x11rb::errors::{ConnectError, ConnectionError, IdsExhausted, ReplyError};
@@ -670,6 +670,15 @@ impl ActiveEventLoop {
 
         self.xconn
             .select_xinput_events(self.root, ALL_MASTER_DEVICES, mask)
+            .map_err(|err| {
+                // Handle loss of connection to the X server by exiting instead of panicking.
+                if let X11Error::Connection(_) = err {
+                    error!("Detected loss of connection to X server while reading window geometry; exiting application...");
+                    // Use exit code 1 to match the default Xlib I/O error handler.
+                    std::process::exit(1);
+                }
+                err
+            })
             .expect_then_ignore_error("Failed to update device event filter");
     }
 
