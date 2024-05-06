@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::{cmp, env};
 
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use x11rb::connection::Connection;
 use x11rb::properties::{WmHints, WmSizeHints, WmSizeHintsSpecification};
 use x11rb::protocol::shape::SK;
@@ -1239,6 +1239,18 @@ impl UnownedWindow {
         // is BadWindow, and if the window handle is bad we have bigger problems.
         self.xconn
             .get_geometry(self.xwindow)
+            .map_err(|err| {
+                // Handle loss of connection to the X server by exiting instead of panicking.
+                if let X11Error::Connection(_) = err {
+                    error!(
+                        "Detected loss of connection to X server while reading window geometry; \
+                         exiting application..."
+                    );
+                    // Use exit code 1 to match the default Xlib I/O error handler.
+                    std::process::exit(1);
+                }
+                err
+            })
             .map(|geo| (geo.width.into(), geo.height.into()))
             .unwrap()
     }
