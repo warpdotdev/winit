@@ -1244,7 +1244,7 @@ impl UnownedWindow {
                 if let X11Error::Connection(_) = err {
                     error!(
                         "Detected loss of connection to X server while reading window geometry; \
-                        exiting application..."
+                         exiting application..."
                     );
                     // Use exit code 1 to match the default Xlib I/O error handler.
                     std::process::exit(1);
