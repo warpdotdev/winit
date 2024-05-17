@@ -17,7 +17,13 @@ impl<T: 'static> EventLoopProxy<T> {
 
     pub fn send_event(&self, event: T) -> Result<(), EventLoopClosed<T>> {
         self.sender.send(event).map_err(|SendError(event)| EventLoopClosed(event))?;
-        self.runner.wake();
+
+        // Workaround: the we should never be immediately executing new things on the event loop!
+        let runner = self.runner.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            runner.wake();
+        });
+
         Ok(())
     }
 }
