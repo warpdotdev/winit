@@ -127,11 +127,14 @@ impl ResizeScaleInternal {
              (-webkit-device-pixel-ratio: {current_scale})",
         );
         let mql = MediaQueryListHandle::new(window, &media_query, closure);
-        debug_assert!(
-            mql.mql().matches(),
-            "created media query doesn't match, {current_scale} != {}",
-            super::scale_factor(window)
-        );
+        // TODO(PLAT-806): There's a winit/browser bug that causes this debug_assert
+        // to trigger when the print dialog is open. To prevent debug builds from
+        // panicking, we disable the debug_assert for now.
+        // debug_assert!(
+        //     mql.mql().matches(),
+        //     "created media query doesn't match, {current_scale} != {}",
+        //     super::scale_factor(window)
+        // );
         mql
     }
 
