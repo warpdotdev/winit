@@ -30,6 +30,7 @@ impl MediaQueryListHandle {
         Self { mql, closure }
     }
 
+    #[allow(dead_code)]
     pub fn mql(&self) -> &MediaQueryList {
         &self.mql
     }
