@@ -14,14 +14,14 @@ use core_foundation::runloop::{
     kCFRunLoopCommonModes, CFRunLoopAddSource, CFRunLoopGetMain, CFRunLoopSourceContext,
     CFRunLoopSourceCreate, CFRunLoopSourceRef, CFRunLoopSourceSignal, CFRunLoopWakeUp,
 };
-use objc2::rc::{autoreleasepool, Id};
+use objc2::rc::{autoreleasepool, Retained};
 use objc2::runtime::ProtocolObject;
 use objc2::{msg_send_id, ClassType};
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSWindow};
 use objc2_foundation::{MainThreadMarker, NSObjectProtocol};
 
 use super::app::WinitApplication;
-use super::app_delegate::{ApplicationDelegate, HandlePendingUserEvents};
+use super::app_state::{ApplicationDelegate, HandlePendingUserEvents};
 use super::event::dummy_event;
 use super::monitor::{self, MonitorHandle};
 use super::observer::setup_control_flow_observers;
@@ -67,15 +67,19 @@ impl PanicInfo {
 
 #[derive(Debug)]
 pub struct ActiveEventLoop {
-    delegate: Id<ApplicationDelegate>,
+    delegate: Retained<ApplicationDelegate>,
     pub(super) mtm: MainThreadMarker,
 }
 
 impl ActiveEventLoop {
-    pub(super) fn new_root(delegate: Id<ApplicationDelegate>) -> RootWindowTarget {
+    pub(super) fn new_root(delegate: Retained<ApplicationDelegate>) -> RootWindowTarget {
         let mtm = MainThreadMarker::from(&*delegate);
         let p = Self { delegate, mtm };
         RootWindowTarget { p, _marker: PhantomData }
+    }
+
+    pub(super) fn app_delegate(&self) -> &ApplicationDelegate {
+        &self.delegate
     }
 
     pub fn create_custom_cursor(&self, source: CustomCursorSource) -> RootCustomCursor {
@@ -133,9 +137,7 @@ impl ActiveEventLoop {
     pub(crate) fn owned_display_handle(&self) -> OwnedDisplayHandle {
         OwnedDisplayHandle
     }
-}
 
-impl ActiveEventLoop {
     pub(crate) fn hide_application(&self) {
         NSApplication::sharedApplication(self.mtm).hide(None)
     }
@@ -172,12 +174,12 @@ pub struct EventLoop<T: 'static> {
     ///
     /// We intentionally don't store `WinitApplication` since we want to have
     /// the possibility of swapping that out at some point.
-    app: Id<NSApplication>,
+    app: Retained<NSApplication>,
     /// The application delegate that we've registered.
     ///
     /// The delegate is only weakly referenced by NSApplication, so we must
     /// keep it around here as well.
-    delegate: Id<ApplicationDelegate>,
+    delegate: Retained<ApplicationDelegate>,
 
     // Event sender and receiver, used for EventLoopProxy.
     sender: mpsc::Sender<T>,
@@ -211,7 +213,7 @@ impl<T> EventLoop<T> {
         let mtm = MainThreadMarker::new()
             .expect("on macOS, `EventLoop` must be created on the main thread!");
 
-        let app: Id<NSApplication> =
+        let app: Retained<NSApplication> =
             unsafe { msg_send_id![WinitApplication::class(), sharedApplication] };
 
         if !app.is_kind_of::<WinitApplication>() {
@@ -238,7 +240,7 @@ impl<T> EventLoop<T> {
         });
 
         let panic_info: Rc<PanicInfo> = Default::default();
-        setup_control_flow_observers(Rc::downgrade(&panic_info));
+        setup_control_flow_observers(mtm, Rc::downgrade(&panic_info));
 
         let (sender, receiver) = mpsc::channel();
         Ok(EventLoop {

@@ -1,6 +1,6 @@
 #![allow(clippy::unnecessary_cast)]
 
-use objc2::rc::{autoreleasepool, Id};
+use objc2::rc::{autoreleasepool, Retained};
 use objc2::{declare_class, mutability, ClassType, DeclaredClass};
 use objc2_app_kit::{NSResponder, NSWindow};
 use objc2_foundation::{MainThreadBound, MainThreadMarker, NSObject};
@@ -11,9 +11,9 @@ use crate::error::OsError as RootOsError;
 use crate::window::WindowAttributes;
 
 pub(crate) struct Window {
-    window: MainThreadBound<Id<WinitWindow>>,
+    window: MainThreadBound<Retained<WinitWindow>>,
     /// The window only keeps a weak reference to this, so we must keep it around here.
-    delegate: MainThreadBound<Id<WindowDelegate>>,
+    delegate: MainThreadBound<Retained<WindowDelegate>>,
 }
 
 impl Drop for Window {
@@ -28,7 +28,9 @@ impl Window {
         attributes: WindowAttributes,
     ) -> Result<Self, RootOsError> {
         let mtm = window_target.mtm;
-        let delegate = autoreleasepool(|_| WindowDelegate::new(attributes, mtm))?;
+        let delegate = autoreleasepool(|_| {
+            WindowDelegate::new(window_target.app_delegate(), attributes, mtm)
+        })?;
         Ok(Window {
             window: MainThreadBound::new(delegate.window().retain(), mtm),
             delegate: MainThreadBound::new(delegate, mtm),

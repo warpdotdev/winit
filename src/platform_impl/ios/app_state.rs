@@ -13,14 +13,15 @@ use core_foundation::runloop::{
     kCFRunLoopCommonModes, CFRunLoopAddTimer, CFRunLoopGetMain, CFRunLoopRef, CFRunLoopTimerCreate,
     CFRunLoopTimerInvalidate, CFRunLoopTimerRef, CFRunLoopTimerSetNextFireDate,
 };
-use objc2::rc::Id;
+use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{msg_send, sel};
 use objc2_foundation::{
-    CGRect, CGSize, MainThreadMarker, NSInteger, NSOperatingSystemVersion, NSProcessInfo,
+    CGRect, CGSize, MainThreadMarker, NSInteger, NSObjectProtocol, NSOperatingSystemVersion,
+    NSProcessInfo,
 };
+use objc2_ui_kit::{UIApplication, UICoordinateSpace, UIView, UIWindow};
 
-use super::uikit::UIView;
 use super::window::WinitUIWindow;
 use crate::dpi::PhysicalSize;
 use crate::event::{Event, InnerSizeWriter, StartCause, WindowEvent};
@@ -71,7 +72,7 @@ pub(crate) enum EventWrapper {
 
 #[derive(Debug)]
 pub struct ScaleFactorChanged {
-    pub(super) window: Id<WinitUIWindow>,
+    pub(super) window: Retained<WinitUIWindow>,
     pub(super) suggested_size: PhysicalSize<u32>,
     pub(super) scale_factor: f64,
 }
@@ -98,25 +99,25 @@ impl Event<HandlePendingUserEvents> {
 #[must_use = "dropping `AppStateImpl` without inspecting it is probably a bug"]
 enum AppStateImpl {
     NotLaunched {
-        queued_windows: Vec<Id<WinitUIWindow>>,
+        queued_windows: Vec<Retained<WinitUIWindow>>,
         queued_events: Vec<EventWrapper>,
-        queued_gpu_redraws: HashSet<Id<WinitUIWindow>>,
+        queued_gpu_redraws: HashSet<Retained<WinitUIWindow>>,
     },
     Launching {
-        queued_windows: Vec<Id<WinitUIWindow>>,
+        queued_windows: Vec<Retained<WinitUIWindow>>,
         queued_events: Vec<EventWrapper>,
         queued_handler: EventLoopHandler,
-        queued_gpu_redraws: HashSet<Id<WinitUIWindow>>,
+        queued_gpu_redraws: HashSet<Retained<WinitUIWindow>>,
     },
     ProcessingEvents {
         handler: EventLoopHandler,
-        queued_gpu_redraws: HashSet<Id<WinitUIWindow>>,
+        queued_gpu_redraws: HashSet<Retained<WinitUIWindow>>,
         active_control_flow: ControlFlow,
     },
     // special state to deal with reentrancy and prevent mutable aliasing.
     InUserCallback {
         queued_events: Vec<EventWrapper>,
-        queued_gpu_redraws: HashSet<Id<WinitUIWindow>>,
+        queued_gpu_redraws: HashSet<Retained<WinitUIWindow>>,
     },
     ProcessingRedraws {
         handler: EventLoopHandler,
@@ -227,7 +228,9 @@ impl AppState {
         });
     }
 
-    fn did_finish_launching_transition(&mut self) -> (Vec<Id<WinitUIWindow>>, Vec<EventWrapper>) {
+    fn did_finish_launching_transition(
+        &mut self,
+    ) -> (Vec<Retained<WinitUIWindow>>, Vec<EventWrapper>) {
         let (windows, events, handler, queued_gpu_redraws) = match self.take_state() {
             AppStateImpl::Launching {
                 queued_windows,
@@ -343,7 +346,7 @@ impl AppState {
         UserCallbackTransitionResult::Success { handler, active_control_flow, processing_redraws }
     }
 
-    fn main_events_cleared_transition(&mut self) -> HashSet<Id<WinitUIWindow>> {
+    fn main_events_cleared_transition(&mut self) -> HashSet<Retained<WinitUIWindow>> {
         let (handler, queued_gpu_redraws, active_control_flow) = match self.take_state() {
             AppStateImpl::ProcessingEvents { handler, queued_gpu_redraws, active_control_flow } => {
                 (handler, queued_gpu_redraws, active_control_flow)
@@ -411,7 +414,7 @@ impl AppState {
     }
 }
 
-pub(crate) fn set_key_window(mtm: MainThreadMarker, window: &Id<WinitUIWindow>) {
+pub(crate) fn set_key_window(mtm: MainThreadMarker, window: &Retained<WinitUIWindow>) {
     let mut this = AppState::get_mut(mtm);
     match this.state_mut() {
         &mut AppStateImpl::NotLaunched { ref mut queued_windows, .. } => {
@@ -431,7 +434,7 @@ pub(crate) fn set_key_window(mtm: MainThreadMarker, window: &Id<WinitUIWindow>) 
     window.makeKeyAndVisible();
 }
 
-pub(crate) fn queue_gl_or_metal_redraw(mtm: MainThreadMarker, window: Id<WinitUIWindow>) {
+pub(crate) fn queue_gl_or_metal_redraw(mtm: MainThreadMarker, window: Retained<WinitUIWindow>) {
     let mut this = AppState::get_mut(mtm);
     match this.state_mut() {
         &mut AppStateImpl::NotLaunched { ref mut queued_gpu_redraws, .. }
@@ -659,6 +662,28 @@ fn handle_user_events(mtm: MainThreadMarker) {
     }
 }
 
+pub(crate) fn send_occluded_event_for_all_windows(application: &UIApplication, occluded: bool) {
+    let mtm = MainThreadMarker::from(application);
+
+    let mut events = Vec::new();
+    #[allow(deprecated)]
+    for window in application.windows().iter() {
+        if window.is_kind_of::<WinitUIWindow>() {
+            // SAFETY: We just checked that the window is a `winit` window
+            let window = unsafe {
+                let ptr: *const UIWindow = window;
+                let ptr: *const WinitUIWindow = ptr.cast();
+                &*ptr
+            };
+            events.push(EventWrapper::StaticEvent(Event::WindowEvent {
+                window_id: RootWindowId(window.id()),
+                event: WindowEvent::Occluded(occluded),
+            }));
+        }
+    }
+    handle_nonuser_events(mtm, events);
+}
+
 pub fn handle_main_events_cleared(mtm: MainThreadMarker) {
     let mut this = AppState::get_mut(mtm);
     if !this.has_launched() || this.has_terminated() {
@@ -693,7 +718,27 @@ pub fn handle_events_cleared(mtm: MainThreadMarker) {
     AppState::get_mut(mtm).events_cleared_transition();
 }
 
-pub fn terminated(mtm: MainThreadMarker) {
+pub(crate) fn terminated(application: &UIApplication) {
+    let mtm = MainThreadMarker::from(application);
+
+    let mut events = Vec::new();
+    #[allow(deprecated)]
+    for window in application.windows().iter() {
+        if window.is_kind_of::<WinitUIWindow>() {
+            // SAFETY: We just checked that the window is a `winit` window
+            let window = unsafe {
+                let ptr: *const UIWindow = window;
+                let ptr: *const WinitUIWindow = ptr.cast();
+                &*ptr
+            };
+            events.push(EventWrapper::StaticEvent(Event::WindowEvent {
+                window_id: RootWindowId(window.id()),
+                event: WindowEvent::Destroyed,
+            }));
+        }
+    }
+    handle_nonuser_events(mtm, events);
+
     let mut this = AppState::get_mut(mtm);
     let mut handler = this.terminated_transition();
     drop(this);
@@ -721,7 +766,7 @@ fn handle_hidpi_proxy(handler: &mut EventLoopHandler, event: ScaleFactorChanged)
     view.setFrame(new_frame);
 }
 
-fn get_view_and_screen_frame(window: &WinitUIWindow) -> (Id<UIView>, CGRect) {
+fn get_view_and_screen_frame(window: &WinitUIWindow) -> (Retained<UIView>, CGRect) {
     let view_controller = window.rootViewController().unwrap();
     let view = view_controller.view().unwrap();
     let bounds = window.bounds();
@@ -857,23 +902,17 @@ fn meets_requirements(
 }
 
 fn get_version() -> NSOperatingSystemVersion {
-    unsafe {
-        let process_info = NSProcessInfo::processInfo();
-        let atleast_ios_8: bool = msg_send![
-            &process_info,
-            respondsToSelector: sel!(operatingSystemVersion)
-        ];
-        // winit requires atleast iOS 8 because no one has put the time into supporting earlier os
-        // versions. Older iOS versions are increasingly difficult to test. For example,
-        // Xcode 11 does not support debugging on devices with an iOS version of less than
-        // 8. Another example, in order to use an iOS simulator older than iOS 8, you must
-        // download an older version of Xcode (<9), and at least Xcode 7 has been tested to
-        // not even run on macOS 10.15 - Xcode 8 might?
-        //
-        // The minimum required iOS version is likely to grow in the future.
-        assert!(atleast_ios_8, "`winit` requires iOS version 8 or greater");
-        process_info.operatingSystemVersion()
-    }
+    let process_info = NSProcessInfo::processInfo();
+    let atleast_ios_8 = process_info.respondsToSelector(sel!(operatingSystemVersion));
+    // Winit requires atleast iOS 8 because no one has put the time into supporting earlier os
+    // versions. Older iOS versions are increasingly difficult to test. For example, Xcode 11 does
+    // not support debugging on devices with an iOS version of less than 8. Another example, in
+    // order to use an iOS simulator older than iOS 8, you must download an older version of Xcode
+    // (<9), and at least Xcode 7 has been tested to not even run on macOS 10.15 - Xcode 8 might?
+    //
+    // The minimum required iOS version is likely to grow in the future.
+    assert!(atleast_ios_8, "`winit` requires iOS version 8 or greater");
+    process_info.operatingSystemVersion()
 }
 
 pub fn os_capabilities() -> OSCapabilities {
