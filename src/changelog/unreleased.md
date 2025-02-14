@@ -49,6 +49,8 @@ changelog entry.
 
 - On Web, fix `EventLoopProxy::send_event()` triggering event loop immediately
   when not called from inside the event loop. Now queues a microtask instead.
+- On Windows, prevent incorrect shifting when dragging window onto a monitor
+  with different DPI.
 
 ### Removed
 
