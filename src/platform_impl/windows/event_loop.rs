@@ -2479,8 +2479,8 @@ unsafe fn public_window_callback_inner(
                         conservative_rect.right += bias;
                     }
 
-                    // Check to see if the new window rect is on the monitor with the new DPI factor.
-                    // If it isn't, offset the window so that it is.
+                    // Check to see if the new window rect is on the monitor with the new DPI
+                    // factor. If it isn't, offset the window so that it is.
                     let new_dpi_monitor =
                         unsafe { MonitorFromWindow(window, MONITOR_DEFAULTTONULL) };
                     let conservative_rect_monitor =
@@ -2500,9 +2500,9 @@ unsafe fn public_window_callback_inner(
                         let wrong_monitor_rect = get_monitor_rect(wrong_monitor);
                         let new_monitor_rect = get_monitor_rect(new_dpi_monitor);
 
-                        // The direction to nudge the window in to get the window onto the monitor with
-                        // the new DPI factor. We calculate this by seeing which monitor edges are
-                        // shared and nudging away from the wrong monitor based on those.
+                        // The direction to nudge the window in to get the window onto the monitor
+                        // with the new DPI factor. We calculate this by seeing which monitor edges
+                        // are shared and nudging away from the wrong monitor based on those.
                         #[allow(clippy::bool_to_int_with_if)]
                         let delta_nudge_to_dpi_monitor = (
                             if wrong_monitor_rect.left == new_monitor_rect.right {
