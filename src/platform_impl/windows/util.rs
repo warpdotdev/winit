@@ -3,6 +3,7 @@ use std::iter::once;
 use std::ops::BitAnd;
 use std::os::windows::prelude::{OsStrExt, OsStringExt};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::LazyLock;
 use std::{io, mem, ptr};
 
 use crate::utils::Lazy;
@@ -25,6 +26,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::window::CursorIcon;
+
+pub static WIN_VERSION: LazyLock<windows_version::OsVersion> =
+    LazyLock::new(windows_version::OsVersion::current);
 
 pub fn encode_wide(string: impl AsRef<OsStr>) -> Vec<u16> {
     string.as_ref().encode_wide().chain(once(0)).collect()
