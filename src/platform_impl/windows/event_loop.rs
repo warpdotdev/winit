@@ -88,6 +88,7 @@ use crate::platform_impl::platform::window_state::{
     CursorFlags, ImeState, WindowFlags, WindowState,
 };
 use crate::platform_impl::platform::{raw_input, util, wrap_device_id, Fullscreen};
+use crate::platform_impl::windows::util::WIN10_BUILD_VERSION;
 use crate::platform_impl::Window;
 use crate::utils::Lazy;
 use crate::window::{
@@ -2439,7 +2440,7 @@ unsafe fn public_window_callback_inner(
             }
 
             let new_outer_rect: RECT;
-            if util::WIN_VERSION.build < 22000 {
+            if WIN10_BUILD_VERSION.is_some_and(|version| version < 22000) {
                 // The window position needs adjustment on Windows 10.
                 {
                     let suggested_ul =

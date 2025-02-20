@@ -3,13 +3,13 @@ use std::iter::once;
 use std::ops::BitAnd;
 use std::os::windows::prelude::{OsStrExt, OsStringExt};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::LazyLock;
 use std::{io, mem, ptr};
 
 use windows_sys::core::{HRESULT, PCWSTR};
-use windows_sys::Win32::Foundation::{BOOL, HANDLE, HMODULE, HWND, RECT};
+use windows_sys::Win32::Foundation::{BOOL, HANDLE, HMODULE, HWND, NTSTATUS, RECT};
 use windows_sys::Win32::Graphics::Gdi::{ClientToScreen, HMONITOR};
 use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+use windows_sys::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows_sys::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows_sys::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT, MONITOR_DPI_TYPE, PROCESS_DPI_AWARENESS,
@@ -26,9 +26,6 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use crate::utils::Lazy;
 use crate::window::CursorIcon;
-
-pub static WIN_VERSION: LazyLock<windows_version::OsVersion> =
-    LazyLock::new(windows_version::OsVersion::current);
 
 pub fn encode_wide(string: impl AsRef<OsStr>) -> Vec<u16> {
     string.as_ref().encode_wide().chain(once(0)).collect()
@@ -247,6 +244,34 @@ pub type GetPointerDeviceRects = unsafe extern "system" fn(
 
 pub type GetPointerTouchInfo =
     unsafe extern "system" fn(pointerId: u32, touchInfo: *mut POINTER_TOUCH_INFO) -> BOOL;
+
+pub static WIN10_BUILD_VERSION: Lazy<Option<u32>> = Lazy::new(|| {
+    type RtlGetVersion = unsafe extern "system" fn(*mut OSVERSIONINFOW) -> NTSTATUS;
+    let handle = get_function!("ntdll.dll", RtlGetVersion);
+
+    if let Some(rtl_get_version) = handle {
+        unsafe {
+            let mut vi = OSVERSIONINFOW {
+                dwOSVersionInfoSize: 0,
+                dwMajorVersion: 0,
+                dwMinorVersion: 0,
+                dwBuildNumber: 0,
+                dwPlatformId: 0,
+                szCSDVersion: [0; 128],
+            };
+
+            let status = (rtl_get_version)(&mut vi);
+
+            if status >= 0 && vi.dwMajorVersion == 10 && vi.dwMinorVersion == 0 {
+                Some(vi.dwBuildNumber)
+            } else {
+                None
+            }
+        }
+    } else {
+        None
+    }
+});
 
 pub(crate) static GET_DPI_FOR_WINDOW: Lazy<Option<GetDpiForWindow>> =
     Lazy::new(|| get_function!("user32.dll", GetDpiForWindow));
