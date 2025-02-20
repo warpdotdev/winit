@@ -245,7 +245,7 @@ pub type GetPointerDeviceRects = unsafe extern "system" fn(
 pub type GetPointerTouchInfo =
     unsafe extern "system" fn(pointerId: u32, touchInfo: *mut POINTER_TOUCH_INFO) -> BOOL;
 
-pub static WIN10_BUILD_VERSION: Lazy<Option<u32>> = Lazy::new(|| {
+pub(crate) static WIN10_BUILD_VERSION: Lazy<Option<u32>> = Lazy::new(|| {
     type RtlGetVersion = unsafe extern "system" fn(*mut OSVERSIONINFOW) -> NTSTATUS;
     let handle = get_function!("ntdll.dll", RtlGetVersion);
 
