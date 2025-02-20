@@ -182,7 +182,6 @@ changelog entry.
   whilst files are being dragged over the window. It doesn't contain any file paths, just the
   pointer position.
 - Updated `objc2` to `v0.6`.
-- On Windows, prevent incorrect shifting when dragging window onto a monitor with different DPI.
 
 ### Removed
 

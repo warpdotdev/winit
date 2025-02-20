@@ -17,8 +17,8 @@ use windows_sys::Win32::Foundation::{
     GetLastError, FALSE, HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WAIT_FAILED, WPARAM,
 };
 use windows_sys::Win32::Graphics::Gdi::{
-    MonitorFromRect, RedrawWindow, ScreenToClient, ValidateRect, MONITOR_DEFAULTTONULL,
-    RDW_INTERNALPAINT, SC_SCREENSAVE,
+    GetMonitorInfoW, MonitorFromRect, MonitorFromWindow, RedrawWindow, ScreenToClient,
+    ValidateRect, MONITORINFO, MONITOR_DEFAULTTONULL, RDW_INTERNALPAINT, SC_SCREENSAVE,
 };
 use windows_sys::Win32::System::Ole::RevokeDragDrop;
 use windows_sys::Win32::System::Threading::{
@@ -2477,7 +2477,65 @@ unsafe fn public_window_callback_inner(
                     conservative_rect.right += bias;
                 }
 
-                new_outer_rect = conservative_rect;
+                // Check to see if the new window rect is on the monitor with the new DPI factor.
+                // If it isn't, offset the window so that it is.
+                let new_dpi_monitor = unsafe { MonitorFromWindow(window, MONITOR_DEFAULTTONULL) };
+                let conservative_rect_monitor =
+                    unsafe { MonitorFromRect(&conservative_rect, MONITOR_DEFAULTTONULL) };
+                new_outer_rect = if conservative_rect_monitor == new_dpi_monitor {
+                    conservative_rect
+                } else {
+                    let get_monitor_rect = |monitor| {
+                        let mut monitor_info = MONITORINFO {
+                            cbSize: mem::size_of::<MONITORINFO>() as _,
+                            ..unsafe { mem::zeroed() }
+                        };
+                        unsafe { GetMonitorInfoW(monitor, &mut monitor_info) };
+                        monitor_info.rcMonitor
+                    };
+                    let wrong_monitor = conservative_rect_monitor;
+                    let wrong_monitor_rect = get_monitor_rect(wrong_monitor);
+                    let new_monitor_rect = get_monitor_rect(new_dpi_monitor);
+
+                    // The direction to nudge the window in to get the window onto the monitor with
+                    // the new DPI factor. We calculate this by seeing which monitor edges are
+                    // shared and nudging away from the wrong monitor based on those.
+                    #[allow(clippy::bool_to_int_with_if)]
+                    let delta_nudge_to_dpi_monitor = (
+                        if wrong_monitor_rect.left == new_monitor_rect.right {
+                            -1
+                        } else if wrong_monitor_rect.right == new_monitor_rect.left {
+                            1
+                        } else {
+                            0
+                        },
+                        if wrong_monitor_rect.bottom == new_monitor_rect.top {
+                            1
+                        } else if wrong_monitor_rect.top == new_monitor_rect.bottom {
+                            -1
+                        } else {
+                            0
+                        },
+                    );
+
+                    let abort_after_iterations = new_monitor_rect.right - new_monitor_rect.left
+                        + new_monitor_rect.bottom
+                        - new_monitor_rect.top;
+                    for _ in 0..abort_after_iterations {
+                        conservative_rect.left += delta_nudge_to_dpi_monitor.0;
+                        conservative_rect.right += delta_nudge_to_dpi_monitor.0;
+                        conservative_rect.top += delta_nudge_to_dpi_monitor.1;
+                        conservative_rect.bottom += delta_nudge_to_dpi_monitor.1;
+
+                        if unsafe { MonitorFromRect(&conservative_rect, MONITOR_DEFAULTTONULL) }
+                            == new_dpi_monitor
+                        {
+                            break;
+                        }
+                    }
+
+                    conservative_rect
+                };
             }
 
             unsafe {
