@@ -269,6 +269,7 @@ windows-sys = { version = "0.52.0", features = [
     "Win32_UI_TextServices",
     "Win32_UI_WindowsAndMessaging",
 ] }
+windows-version = "0.1.1"
 
 # Linux
 [target.'cfg(all(unix, not(any(target_os = "redox", target_family = "wasm", target_os = "android", target_vendor = "apple"))))'.dependencies]
