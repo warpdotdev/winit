@@ -553,10 +553,19 @@ impl ActiveEventLoop {
                 let canvas = canvas_clone.clone();
 
                 move |new_size| {
-                    let canvas = canvas.borrow();
-                    canvas.set_current_size(new_size);
-                    if canvas.old_size() != new_size {
-                        canvas.set_old_size(new_size);
+                    // Release the canvas borrow before sending events, because event
+                    // processing can synchronously re-enter and attempt to borrow_mut
+                    // the canvas (e.g. to update the cursor), which would panic.
+                    let size_changed = {
+                        let canvas = canvas.borrow();
+                        canvas.set_current_size(new_size);
+                        let changed = canvas.old_size() != new_size;
+                        if changed {
+                            canvas.set_old_size(new_size);
+                        }
+                        changed
+                    };
+                    if size_changed {
                         runner.send_event(Event::WindowEvent {
                             window_id: RootWindowId(id),
                             event: WindowEvent::Resized(new_size),
