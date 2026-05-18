@@ -570,7 +570,7 @@ impl ActiveEventLoop {
                             window_id: RootWindowId(id),
                             event: WindowEvent::Resized(new_size),
                         });
-                        canvas.request_animation_frame();
+                        canvas.borrow().request_animation_frame();
                     }
                 }
             },
