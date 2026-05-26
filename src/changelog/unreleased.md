@@ -217,6 +217,11 @@ changelog entry.
 
 ### Fixed
 
+- On Windows, fix deadlock when switching keyboard layout via tools like PuntoSwitcher or IME
+  switchers. The `LAYOUT_CACHE` mutex was held across a `PeekMessageW` call in the `WM_KEYDOWN`
+  handler, which could dispatch re-entrant messages that tried to re-acquire the same lock.
+- On Windows, handle `WM_INPUTLANGCHANGE` explicitly to refresh the layout cache and avoid
+  re-entrant deadlocks through `DefWindowProc`.
 - On Orbital, `MonitorHandle::name()` now returns `None` instead of a dummy name.
 - On iOS, fixed `SurfaceResized` and `Window::surface_size` not reporting the size of the actual surface.
 - On macOS, fixed the scancode conversion for audio volume keys.

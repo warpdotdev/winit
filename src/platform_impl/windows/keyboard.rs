@@ -111,8 +111,6 @@ impl KeyEventBuilder {
                     let pending_token = self.pending.add_pending();
                     *result = ProcResult::Value(0);
 
-                    let next_msg = next_kbd_msg(hwnd);
-
                     let mut layouts = LAYOUT_CACHE.lock().unwrap();
                     let mut finished_event_info = Some(PartialKeyEventInfo::from_message(
                         wparam,
@@ -120,6 +118,15 @@ impl KeyEventBuilder {
                         ElementState::Pressed,
                         &mut layouts,
                     ));
+                    // We MUST release the layout lock before calling `next_kbd_msg`,
+                    // otherwise PeekMessageW may dispatch re-entrant messages (e.g.
+                    // WM_INPUTLANGCHANGE from PuntoSwitcher or other IME switchers)
+                    // that try to re-acquire LAYOUT_CACHE on the same thread, causing
+                    // a deadlock.
+                    drop(layouts);
+
+                    let next_msg = next_kbd_msg(hwnd);
+
                     let mut event_info = self.event_info.lock().unwrap();
                     *event_info = None;
                     if let Some(next_msg) = next_msg {
@@ -133,6 +140,7 @@ impl KeyEventBuilder {
                             // store the partial information, and add to it in the upcoming events
                             *event_info = finished_event_info.take();
                         } else {
+                            let mut layouts = LAYOUT_CACHE.lock().unwrap();
                             let (_, layout) = layouts.get_current_layout();
                             let is_fake = {
                                 let curr_event = finished_event_info.as_ref().unwrap();
