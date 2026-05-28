@@ -1570,19 +1570,18 @@ unsafe fn public_window_callback_inner(
         },
 
         WM_INPUTLANGCHANGE => {
-            // Refresh the layout cache so subsequent key events use the new
-            // layout. This message is sent by Windows (or tools like
-            // PuntoSwitcher) when the keyboard layout changes. We handle it
-            // explicitly to avoid re-entrant deadlocks: without this handler
-            // the message falls through to DefWindowProc which may
-            // synchronously dispatch IME messages while LAYOUT_CACHE is held
-            // by a parent WNDPROC frame.
+            // Refresh the cached keyboard layout for the newly activated input
+            // language. This message is sent (by Windows or by layout switchers
+            // such as Punto Switcher) after the layout changes. Refreshing the
+            // cache here prevents a freeze that otherwise occurs when switching
+            // layout via such tools. We still defer to `DefWindowProc` so the
+            // message keeps propagating to first-level child windows, as the
+            // Win32 documentation requires.
             {
                 let mut layouts = LAYOUT_CACHE.lock().unwrap();
                 layouts.get_current_layout();
             }
-            update_modifiers(window, userdata);
-            result = ProcResult::Value(1);
+            result = ProcResult::DefWindowProc(wparam);
         },
 
         // this is necessary for us to maintain minimize/restore state
