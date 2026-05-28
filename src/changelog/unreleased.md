@@ -217,6 +217,9 @@ changelog entry.
 
 ### Fixed
 
+- On Windows, fix freeze when switching keyboard layout with tools like Punto Switcher. The
+  `WM_INPUTLANGCHANGE` message is now handled to refresh the cached keyboard layout, while still
+  deferring to `DefWindowProc` for normal propagation.
 - On Orbital, `MonitorHandle::name()` now returns `None` instead of a dummy name.
 - On iOS, fixed `SurfaceResized` and `Window::surface_size` not reporting the size of the actual surface.
 - On macOS, fixed the scancode conversion for audio volume keys.
