@@ -1054,6 +1054,11 @@ impl WindowState {
         self.reload_transparency_hint();
     }
 
+    /// Returns the number of registered text inputs.
+    pub fn text_inputs_len(&self) -> usize {
+        self.text_inputs.len()
+    }
+
     /// Register text input on the top-level.
     #[inline]
     pub fn text_input_entered(&mut self, text_input: &ZwpTextInputV3) {
