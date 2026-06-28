@@ -16,6 +16,7 @@ use crate::event::{ElementState, WindowEvent};
 use crate::keyboard::ModifiersState;
 use crate::platform_impl::common::xkb::Context;
 use crate::platform_impl::wayland::event_loop::sink::EventSink;
+use crate::platform_impl::wayland::seat::text_input::ZwpTextInputV3Ext;
 use crate::platform_impl::wayland::state::WinitState;
 use crate::platform_impl::wayland::{self, WindowId};
 

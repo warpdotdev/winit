@@ -138,17 +138,29 @@ impl Dispatch<ZwpTextInputV3, TextInputData, WinitState> for TextInputState {
                     state
                         .events_sink
                         .push_window_event(WindowEvent::Ime(Ime::Commit(text)), window_id);
+
+                    // After a commit the preedit is gone, so clear the last sent.
+                    text_input_data.last_sent_preedit = None;
                 }
 
-                // Send preedit.
-                if let Some(preedit) = pending_preedit {
-                    let cursor_range =
-                        preedit.cursor_begin.map(|b| (b, preedit.cursor_end.unwrap_or(b)));
+                // Deduplicate: skip if the preedit hasn't changed since last time.
+                // fcitx5/KWin may send multiple identical done events per keystroke;
+                // sending all of them floods Warp with SetMarkedText dispatches,
+                // each triggering a re-render + set_ime_cursor_area + commit()
+                // that can overwhelm the compositor.
+                if let Some(ref preedit) = pending_preedit {
+                    if text_input_data.last_sent_preedit.as_ref() != Some(preedit) {
+                        let cursor_range = preedit
+                            .cursor_begin
+                            .map(|b| (b, preedit.cursor_end.unwrap_or(b)));
 
-                    state.events_sink.push_window_event(
-                        WindowEvent::Ime(Ime::Preedit(preedit.text, cursor_range)),
-                        window_id,
-                    );
+                        state.events_sink.push_window_event(
+                            WindowEvent::Ime(Ime::Preedit(preedit.text.clone(), cursor_range)),
+                            window_id,
+                        );
+
+                        text_input_data.last_sent_preedit = Some(preedit.clone());
+                    }
                 }
             },
             TextInputEvent::DeleteSurroundingText { .. } => {
@@ -190,9 +202,13 @@ pub struct TextInputDataInner {
 
     /// The preedit to submit on `done`.
     pending_preedit: Option<Preedit>,
+
+    /// The last preedit sent to the application, for deduplication.
+    last_sent_preedit: Option<Preedit>,
 }
 
 /// The state of the preedit.
+#[derive(Clone, PartialEq)]
 struct Preedit {
     text: String,
     cursor_begin: Option<usize>,
