@@ -69,14 +69,19 @@ impl Dispatch<ZwpTextInputV3, TextInputData, WinitState> for TextInputState {
                     None => return,
                 };
 
-                if window.ime_allowed() {
-                    text_input.enable();
-                    text_input.set_content_type_by_purpose(window.ime_purpose());
-                    text_input.commit();
-                    state.events_sink.push_window_event(WindowEvent::Ime(Ime::Enabled), window_id);
-                }
+                // NOTE: We do NOT call `enable()` + `commit()` here because
+                // those have already been sent proactively — in
+                // `new_capability`, `WlKeyboard::enter`, and
+                // `set_ime_allowed` — before the compositor sends `enter`.
+                // Calling them again here causes a double-activation cycle
+                // that makes the compositor re-send preedit events, leading
+                // to severe lag and repeated SetMarkedText dispatches.
 
                 window.text_input_entered(text_input);
+
+                if window.ime_allowed() {
+                    state.events_sink.push_window_event(WindowEvent::Ime(Ime::Enabled), window_id);
+                }
             },
             TextInputEvent::Leave { surface } => {
                 text_input_data.surface = None;
@@ -119,25 +124,24 @@ impl Dispatch<ZwpTextInputV3, TextInputData, WinitState> for TextInputState {
                     None => return,
                 };
 
-                // Clear preedit, unless all we'll be doing next is sending a new preedit.
-                if text_input_data.pending_commit.is_some()
-                    || text_input_data.pending_preedit.is_none()
-                {
+                // Take pending state so it's consumed exactly once.
+                let pending_commit = text_input_data.pending_commit.take();
+                let pending_preedit = text_input_data.pending_preedit.take();
+
+                // Send `Commit` (with a preedit-clear first, if there is any
+                // preedit to clear).
+                if let Some(text) = pending_commit {
                     state.events_sink.push_window_event(
                         WindowEvent::Ime(Ime::Preedit(String::new(), None)),
                         window_id,
                     );
-                }
-
-                // Send `Commit`.
-                if let Some(text) = text_input_data.pending_commit.take() {
                     state
                         .events_sink
                         .push_window_event(WindowEvent::Ime(Ime::Commit(text)), window_id);
                 }
 
                 // Send preedit.
-                if let Some(preedit) = text_input_data.pending_preedit.take() {
+                if let Some(preedit) = pending_preedit {
                     let cursor_range =
                         preedit.cursor_begin.map(|b| (b, preedit.cursor_end.unwrap_or(b)));
 

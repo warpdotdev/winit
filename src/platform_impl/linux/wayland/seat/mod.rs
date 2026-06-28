@@ -44,7 +44,7 @@ pub struct WinitSeatState {
     first_touch_id: Option<i32>,
 
     /// The text input bound on the seat.
-    text_input: Option<Arc<ZwpTextInputV3>>,
+    pub(crate) text_input: Option<Arc<ZwpTextInputV3>>,
 
     /// The relative pointer bound on the seat.
     relative_pointer: Option<ZwpRelativePointerV1>,
@@ -136,6 +136,25 @@ impl SeatHandler for WinitState {
                 queue_handle,
                 TextInputData::default(),
             )));
+
+            // Proactively register the new text_input with every existing window,
+            // and enable it for any window that already has `ime_allowed = true`.
+            //
+            // Without this, the `enter` handler in text_input/mod.rs would be the
+            // only code path that calls `text_input.enable()` + `commit()`, but
+            // some compositors only send `enter` *after* receiving an `enable()`
+            // request — causing a protocol deadlock.
+            if let Some(text_input) = &seat_state.text_input {
+                for (_, window_mutex) in self.windows.get_mut() {
+                    let mut window = window_mutex.lock().unwrap();
+                    window.text_input_entered(text_input);
+                    if window.ime_allowed() {
+                        text_input.enable();
+                        text_input.set_content_type_by_purpose(window.ime_purpose());
+                        text_input.commit();
+                    }
+                }
+            }
         }
     }
 

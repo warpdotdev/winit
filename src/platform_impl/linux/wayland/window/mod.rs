@@ -176,6 +176,14 @@ impl Window {
         let window_id = super::make_wid(&surface);
         state.windows.get_mut().insert(window_id, window_state.clone());
 
+        // Register existing seat text_inputs so that a subsequent
+        // `set_ime_allowed(true)` can immediately enable them.
+        for seat_state in state.seats.values() {
+            if let Some(text_input) = &seat_state.text_input {
+                window_state.lock().unwrap().text_input_entered(text_input);
+            }
+        }
+
         let window_requests = WindowRequests {
             redraw_requested: AtomicBool::new(true),
             closed: AtomicBool::new(false),
