@@ -1344,7 +1344,9 @@ impl EventProcessor {
         }
 
         if let Some(ime) = self.target.ime.as_ref() {
-            ime.borrow_mut().unfocus(xev.event).expect("Failed to unfocus input context");
+            if let Err(err) = ime.borrow_mut().unfocus(xev.event) {
+                tracing::warn!("Failed to unfocus input context: {err:?}");
+            }
         }
 
         if self.active_window.take() == Some(window) {
