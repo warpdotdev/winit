@@ -1814,9 +1814,11 @@ impl UnownedWindow {
                 .unwrap_or_default();
 
         wm_hints.urgent = request_type.is_some();
-        wm_hints
-            .set(self.xconn.xcb_connection(), self.xwindow as xproto::Window)
-            .expect_then_ignore_error("Failed to set WM hints");
+        if let Ok(cookie) =
+            wm_hints.set(self.xconn.xcb_connection(), self.xwindow as xproto::Window)
+        {
+            cookie.ignore_error();
+        }
     }
 
     #[inline]
