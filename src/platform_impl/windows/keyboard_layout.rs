@@ -272,13 +272,6 @@ impl LayoutCache {
         }
     }
 
-    /// Unconditionally recomputes the current layout, replacing any existing cache entry for it.
-    ///
-    /// Unlike [`Self::get_current_layout`], this doesn't trust an existing cache entry for the
-    /// current HKL. Windows can reuse an `HKL` value after the layout it identified is unloaded
-    /// and a different one is loaded in its place, which would otherwise leave
-    /// [`Self::get_current_layout`] serving key mappings for the wrong layout. Callers that
-    /// learn the input layout changed (e.g. on `WM_INPUTLANGCHANGE`) should call this instead.
     pub fn refresh_current_layout(&mut self) -> (u64, &Layout) {
         let locale_id = unsafe { GetKeyboardLayout(0) } as u64;
         let layout = Self::prepare_layout(locale_id);
@@ -1003,12 +996,6 @@ fn vkey_to_non_char_key(
 mod tests {
     use super::*;
 
-    /// `get_current_layout` trusts an existing cache entry for the current `HKL` without
-    /// re-checking it, which is the right choice for the hot keystroke path but would serve
-    /// stale data if Windows reused the `HKL` value for a different layout. `refresh_current_layout`
-    /// exists precisely to bypass that trust, so this proves it actually recomputes the entry
-    /// rather than returning the cached one unchanged, by planting an entry that could not have
-    /// come from a real `prepare_layout(locale_id)` call and confirming it gets replaced.
     #[test]
     fn refresh_current_layout_replaces_a_stale_entry() {
         let mut cache = LayoutCache::default();
@@ -1016,17 +1003,10 @@ mod tests {
 
         let poisoned_hkl = !locale_id;
         cache.layouts.get_mut(&locale_id).unwrap().hkl = poisoned_hkl;
-        assert_eq!(
-            cache.get_current_layout().1.hkl,
-            poisoned_hkl,
-            "sanity check: get_current_layout must trust the existing entry"
-        );
+        assert_eq!(cache.get_current_layout().1.hkl, poisoned_hkl);
 
         let (refreshed_id, refreshed_layout) = cache.refresh_current_layout();
         assert_eq!(refreshed_id, locale_id);
-        assert_eq!(
-            refreshed_layout.hkl, locale_id,
-            "refresh_current_layout must recompute the entry instead of trusting the stale one"
-        );
+        assert_eq!(refreshed_layout.hkl, locale_id);
     }
 }

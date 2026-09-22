@@ -1786,9 +1786,6 @@ unsafe fn public_window_callback_inner(
         // of trusting whatever is already cached for it.
         WM_INPUTLANGCHANGE => {
             LAYOUT_CACHE.lock().unwrap().refresh_current_layout();
-            // Per https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-inputlangchange,
-            // an application should pass this to `DefWindowProc` so it also reaches
-            // first-level child windows.
             result = ProcResult::DefWindowProc(wparam);
         },
 
