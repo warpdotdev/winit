@@ -5,7 +5,7 @@ use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use windows_sys::core::{IUnknown, GUID, HRESULT};
-use windows_sys::Win32::Foundation::{DV_E_FORMATETC, HWND, POINTL, S_OK};
+use windows_sys::Win32::Foundation::{DV_E_FORMATETC, E_FAIL, HWND, POINTL, S_OK};
 use windows_sys::Win32::System::Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL};
 use windows_sys::Win32::System::Ole::{CF_HDROP, DROPEFFECT_COPY, DROPEFFECT_NONE};
 use windows_sys::Win32::UI::Shell::{DragFinish, DragQueryFileW, HDROP};
@@ -55,9 +55,8 @@ impl FileDropHandler {
         _riid: *const GUID,
         _ppvObject: *mut *mut c_void,
     ) -> HRESULT {
-        // This function doesn't appear to be required for an `IDropTarget`.
-        // An implementation would be nice however.
-        unimplemented!();
+        tracing::warn!("`QueryInterface` called, but it was unimplemented");
+        E_FAIL
     }
 
     pub unsafe extern "system" fn AddRef(this: *mut IUnknown) -> u32 {
