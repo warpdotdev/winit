@@ -4,8 +4,9 @@ use std::{ffi::c_void, ptr};
 
 use crate::utils::Lazy;
 use windows_sys::core::PCSTR;
-use windows_sys::Win32::Foundation::{BOOL, HWND, NTSTATUS, S_OK};
+use windows_sys::Win32::Foundation::{BOOL, ERROR_SUCCESS, HWND, NTSTATUS, S_OK};
 use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows_sys::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows_sys::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTA};
 use windows_sys::Win32::UI::Controls::SetWindowTheme;
@@ -54,6 +55,9 @@ static DARK_MODE_SUPPORTED: Lazy<bool> = Lazy::new(|| {
 
 static DARK_THEME_NAME: Lazy<Vec<u16>> = Lazy::new(|| util::encode_wide("DarkMode_Explorer"));
 static LIGHT_THEME_NAME: Lazy<Vec<u16>> = Lazy::new(|| util::encode_wide(""));
+
+static PERSONALIZE_KEY: Lazy<Vec<u16>> = Lazy::new(|| util::encode_wide(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"));
+static APPS_USE_LIGHT_THEME: Lazy<Vec<u16>> = Lazy::new(|| util::encode_wide("AppsUseLightTheme"));
 
 /// Attempt to set a theme on a window, if necessary.
 /// Returns the theme that was picked
@@ -128,6 +132,13 @@ pub fn should_use_dark_mode() -> bool {
 }
 
 fn should_apps_use_dark_mode() -> bool {
+    if let Some(apps_use_light_theme) = read_apps_use_light_theme() {
+        return !apps_use_light_theme;
+    }
+
+    // This undocumented method `ShouldAppsUseDarkMode` may return
+    // incorrect values on Windows 11.
+    // See https://github.com/tauri-apps/tao/pull/1165
     type ShouldAppsUseDarkMode = unsafe extern "system" fn() -> bool;
     static SHOULD_APPS_USE_DARK_MODE: Lazy<Option<ShouldAppsUseDarkMode>> = Lazy::new(|| unsafe {
         const UXTHEME_SHOULDAPPSUSEDARKMODE_ORDINAL: PCSTR = 132 as PCSTR;
@@ -152,6 +163,24 @@ fn should_apps_use_dark_mode() -> bool {
     SHOULD_APPS_USE_DARK_MODE
         .map(|should_apps_use_dark_mode| unsafe { (should_apps_use_dark_mode)() })
         .unwrap_or(false)
+}
+
+fn read_apps_use_light_theme() -> Option<bool> {
+    let mut data: u32 = 0;
+    let mut data_size = std::mem::size_of::<u32>() as u32;
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            PERSONALIZE_KEY.as_ptr(),
+            APPS_USE_LIGHT_THEME.as_ptr(),
+            RRF_RT_REG_DWORD,
+            ptr::null_mut(),
+            &mut data as *mut _ as _,
+            &mut data_size,
+        )
+    };
+
+    if status == ERROR_SUCCESS { Some(data != 0) } else { None }
 }
 
 fn is_high_contrast() -> bool {
