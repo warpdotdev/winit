@@ -272,6 +272,13 @@ impl LayoutCache {
         }
     }
 
+    pub fn refresh_current_layout(&mut self) -> (u64, &Layout) {
+        let locale_id = unsafe { GetKeyboardLayout(0) } as u64;
+        let layout = Self::prepare_layout(locale_id);
+        self.layouts.insert(locale_id, layout);
+        (locale_id, self.layouts.get(&locale_id).unwrap())
+    }
+
     pub fn get_agnostic_mods(&mut self) -> ModifiersState {
         let (_, layout) = self.get_current_layout();
         let filter_out_altgr = layout.has_alt_graph && key_pressed(VK_RMENU);
@@ -982,5 +989,24 @@ fn vkey_to_non_char_key(
         VK_PA1 => Key::Unidentified(native_code),
         VK_OEM_CLEAR => Key::Named(NamedKey::Clear),
         _ => Key::Unidentified(native_code),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refresh_current_layout_replaces_a_stale_entry() {
+        let mut cache = LayoutCache::default();
+        let (locale_id, _) = cache.get_current_layout();
+
+        let poisoned_hkl = !locale_id;
+        cache.layouts.get_mut(&locale_id).unwrap().hkl = poisoned_hkl;
+        assert_eq!(cache.get_current_layout().1.hkl, poisoned_hkl);
+
+        let (refreshed_id, refreshed_layout) = cache.refresh_current_layout();
+        assert_eq!(refreshed_id, locale_id);
+        assert_eq!(refreshed_layout.hkl, locale_id);
     }
 }
