@@ -51,6 +51,8 @@ changelog entry.
   when not called from inside the event loop. Now queues a microtask instead.
 - On Windows, prevent incorrect shifting when dragging window onto a monitor
   with different DPI.
+- On X11, don't panic in `Window::request_user_attention` when setting the WM
+  hints fails to send; the error is now logged and ignored.
 
 ### Removed
 
